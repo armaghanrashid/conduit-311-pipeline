@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          pip install --no-deps -e .
+
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Test
+        run: pytest -q
+
+      - name: Pipeline on the fixture, twice (the second run must fetch nothing)
+        run: |
+          conduit run --source fixture --data-dir "$RUNNER_TEMP/lake"
+          conduit run --source fixture --data-dir "$RUNNER_TEMP/lake" | tee "$RUNNER_TEMP/second.txt"
+          grep -q "^fetched          0$" "$RUNNER_TEMP/second.txt"
+          conduit report --data-dir "$RUNNER_TEMP/lake" --out-dir "$RUNNER_TEMP/media"
+          test -f "$RUNNER_TEMP/media/hero.png"
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Validate (no backend, no credentials)
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
