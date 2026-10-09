@@ -1,0 +1,6 @@
+.venv
+data
+docs
+tests
+infra
+.git
